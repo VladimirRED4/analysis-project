@@ -1,3 +1,5 @@
+use std::num::NonZeroU32;
+
 /// Трейт, чтобы **реализовывать** и **требовать** метод 'распарсь и покажи,
 /// что распарсить осталось'
 trait Parser {
@@ -19,11 +21,13 @@ mod stdp {
     // parsers for std types
     use super::Parser;
 
-    /// Беззнаковые числа
+    use std::num::NonZeroU32;
+
+    /// Беззнаковые числа (ненулевые)
     #[derive(Debug)]
     pub struct U32;
     impl Parser for U32 {
-        type Dest = u32;
+        type Dest = NonZeroU32;
         fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
             let input = input.trim_start();
             let (remaining, is_hex) = input
@@ -45,10 +49,9 @@ mod stdp {
             let value = u32::from_str_radix(&remaining[..end_idx], if is_hex { 16 } else { 10 })
                 .map_err(|_| ())?;
 
-            if value == 0 {
-                return Err(());
-            }
-            Ok((&remaining[end_idx..], value))
+            // Используем NonZeroU32 для гарантии ненулевого значения
+            let nonzero = NonZeroU32::new(value).ok_or(())?;
+            Ok((&remaining[end_idx..], nonzero))
         }
     }
 
@@ -805,7 +808,7 @@ impl Parsable for AssetDsc {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Backet {
     pub asset_id: String,
-    pub count: u32,
+    pub count: NonZeroU32,
 }
 impl Parsable for Backet {
     type Parser = Map<
@@ -814,7 +817,7 @@ impl Parsable for Backet {
             Permutation<(KeyValue<Unquote>, KeyValue<stdp::U32>)>,
             StripWhitespace<Tag>,
         >,
-        fn((String, u32)) -> Self,
+        fn((String, NonZeroU32)) -> Self,
     >;
     fn parser() -> Self::Parser {
         map(
@@ -834,7 +837,7 @@ impl Parsable for Backet {
 #[derive(Debug, Clone, PartialEq)]
 pub struct UserCash {
     pub user_id: String,
-    pub count: u32,
+    pub count: NonZeroU32,
 }
 impl Parsable for UserCash {
     type Parser = Map<
@@ -843,7 +846,7 @@ impl Parsable for UserCash {
             Permutation<(KeyValue<Unquote>, KeyValue<stdp::U32>)>,
             StripWhitespace<Tag>,
         >,
-        fn((String, u32)) -> Self,
+        fn((String, NonZeroU32)) -> Self,
     >;
     fn parser() -> Self::Parser {
         map(
@@ -1020,7 +1023,7 @@ pub enum AppLogTraceKind {
 pub enum AppLogJournalKind {
     CreateUser {
         user_id: String,
-        authorized_capital: u32,
+        authorized_capital: std::num::NonZeroU32,
     },
     DeleteUser {
         user_id: String,
@@ -1028,7 +1031,7 @@ pub enum AppLogJournalKind {
     RegisterAsset {
         asset_id: String,
         user_id: String,
-        liquidity: u32,
+        liquidity: std::num::NonZeroU32,
     },
     UnregisterAsset {
         asset_id: String,
@@ -1244,7 +1247,7 @@ impl Parsable for AppLogJournalKind {
                     StripWhitespace<Tag>,
                     Delimited<Tag, Permutation<(KeyValue<Unquote>, KeyValue<stdp::U32>)>, Tag>,
                 >,
-                fn((String, u32)) -> AppLogJournalKind,
+                fn((String, NonZeroU32)) -> AppLogJournalKind,
             >,
             Map<
                 Preceded<StripWhitespace<Tag>, Delimited<Tag, KeyValue<Unquote>, Tag>>,
@@ -1259,7 +1262,7 @@ impl Parsable for AppLogJournalKind {
                         Tag,
                     >,
                 >,
-                fn((String, String, u32)) -> AppLogJournalKind,
+                fn((String, String, NonZeroU32)) -> AppLogJournalKind,
             >,
             Map<
                 Preceded<
@@ -1290,6 +1293,7 @@ impl Parsable for AppLogJournalKind {
         preceded(
             tag("Journal"),
             alt8(
+                // CreateUser
                 map(
                     preceded(
                         strip_whitespace(tag("CreateUser")),
@@ -1304,9 +1308,10 @@ impl Parsable for AppLogJournalKind {
                     ),
                     |(user_id, authorized_capital)| AppLogJournalKind::CreateUser {
                         user_id,
-                        authorized_capital,
+                        authorized_capital, // теперь это NonZeroU32
                     },
                 ),
+                // DeleteUser
                 map(
                     preceded(
                         strip_whitespace(tag("DeleteUser")),
@@ -1314,6 +1319,7 @@ impl Parsable for AppLogJournalKind {
                     ),
                     |user_id| AppLogJournalKind::DeleteUser { user_id },
                 ),
+                // RegisterAsset
                 map(
                     preceded(
                         strip_whitespace(tag("RegisterAsset")),
@@ -1330,9 +1336,10 @@ impl Parsable for AppLogJournalKind {
                     |(asset_id, user_id, liquidity)| AppLogJournalKind::RegisterAsset {
                         asset_id,
                         user_id,
-                        liquidity,
+                        liquidity, // теперь это NonZeroU32
                     },
                 ),
+                // UnregisterAsset
                 map(
                     preceded(
                         strip_whitespace(tag("UnregisterAsset")),
@@ -1347,22 +1354,25 @@ impl Parsable for AppLogJournalKind {
                     ),
                     |(asset_id, user_id)| AppLogJournalKind::UnregisterAsset { asset_id, user_id },
                 ),
+                // DepositCash
                 map(
                     preceded(strip_whitespace(tag("DepositCash")), UserCash::parser()),
-                    |user_cash| AppLogJournalKind::DepositCash(user_cash),
+                    AppLogJournalKind::DepositCash,
                 ),
-                // ИСПРАВЛЕНО: было DepositCash, теперь WithdrawCash
+                // WithdrawCash
                 map(
                     preceded(strip_whitespace(tag("WithdrawCash")), UserCash::parser()),
-                    |user_cash| AppLogJournalKind::WithdrawCash(user_cash),
+                    AppLogJournalKind::WithdrawCash,
                 ),
+                // BuyAsset
                 map(
                     preceded(strip_whitespace(tag("BuyAsset")), UserBacket::parser()),
-                    |user_backet| AppLogJournalKind::BuyAsset(user_backet),
+                    AppLogJournalKind::BuyAsset,
                 ),
+                // SellAsset
                 map(
                     preceded(strip_whitespace(tag("SellAsset")), UserBacket::parser()),
-                    |user_backet| AppLogJournalKind::SellAsset(user_backet),
+                    AppLogJournalKind::SellAsset,
                 ),
             ),
         )
@@ -1410,7 +1420,7 @@ impl Parsable for LogKind {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LogLine {
     pub kind: LogKind,
-    pub request_id: u32,
+    pub request_id: NonZeroU32,
 }
 impl Parsable for LogLine {
     type Parser = Map<
@@ -1418,7 +1428,7 @@ impl Parsable for LogLine {
             <LogKind as Parsable>::Parser,
             StripWhitespace<Preceded<Tag, stdp::U32>>,
         )>,
-        fn((LogKind, u32)) -> Self,
+        fn((LogKind, NonZeroU32)) -> Self,
     >;
     fn parser() -> Self::Parser {
         map(
@@ -1455,13 +1465,28 @@ mod test {
 
     #[test]
     fn test_u32() {
-        assert_eq!(stdp::U32.parse("411"), Ok(("", 411)));
-        assert_eq!(stdp::U32.parse("411ab"), Ok(("ab", 411)));
+        use std::num::NonZeroU32;
+
+        assert_eq!(
+            stdp::U32.parse("411"),
+            Ok(("", NonZeroU32::new(411).unwrap()))
+        );
+        assert_eq!(
+            stdp::U32.parse("411ab"),
+            Ok(("ab", NonZeroU32::new(411).unwrap()))
+        );
         assert_eq!(stdp::U32.parse(""), Err(()));
         assert_eq!(stdp::U32.parse("-3"), Err(()));
-        assert_eq!(stdp::U32.parse("0x03"), Ok(("", 0x3)));
-        assert_eq!(stdp::U32.parse("0x03abg"), Ok(("g", 0x3ab)));
+        assert_eq!(
+            stdp::U32.parse("0x03"),
+            Ok(("", NonZeroU32::new(0x3).unwrap()))
+        );
+        assert_eq!(
+            stdp::U32.parse("0x03abg"),
+            Ok(("g", NonZeroU32::new(0x3ab).unwrap()))
+        );
         assert_eq!(stdp::U32.parse("0x"), Err(()));
+        assert_eq!(stdp::U32.parse("0"), Err(())); // ноль должен вызывать ошибку
     }
 
     #[test]
@@ -1522,72 +1547,87 @@ mod test {
 
     #[test]
     fn test_strip_whitespace() {
+        use std::num::NonZeroU32;
+
         assert_eq!(
-            strip_whitespace(tag("hello")).parse(" hello world".into()),
-            Ok(("world".into(), ()))
+            strip_whitespace(tag("hello")).parse(" hello world"),
+            Ok(("world", ()))
         );
+        assert_eq!(strip_whitespace(tag("hello")).parse("hello"), Ok(("", ())));
         assert_eq!(
-            strip_whitespace(tag("hello")).parse("hello".into()),
-            Ok(("".into(), ()))
-        );
-        assert_eq!(
-            strip_whitespace(stdp::U32).parse(" 42 answer".into()),
-            Ok(("answer".into(), 42))
+            strip_whitespace(stdp::U32).parse(" 42 answer"),
+            Ok(("answer", NonZeroU32::new(42).unwrap()))
         );
     }
 
     #[test]
     fn test_delimited() {
+        use std::num::NonZeroU32;
+
         assert_eq!(
-            delimited(tag("["), stdp::U32, tag("]")).parse("[0x32]".into()),
-            Ok(("".into(), 0x32))
+            delimited(tag("["), stdp::U32, tag("]")).parse("[0x32]"),
+            Ok(("", NonZeroU32::new(0x32).unwrap()))
         );
         assert_eq!(
-            delimited(tag("[".into()), stdp::U32, tag("]".into())).parse("[0x32] nice".into()),
-            Ok((" nice".into(), 0x32))
+            delimited(tag("["), stdp::U32, tag("]")).parse("[0x32] nice"),
+            Ok((" nice", NonZeroU32::new(0x32).unwrap()))
         );
         assert_eq!(
-            delimited(tag("[".into()), stdp::U32, tag("]")).parse("0x32]".into()),
+            delimited(tag("["), stdp::U32, tag("]")).parse("0x32]"),
             Err(())
         );
         assert_eq!(
-            delimited(tag("[".into()), stdp::U32, tag("]")).parse("[0x32".into()),
+            delimited(tag("["), stdp::U32, tag("]")).parse("[0x32"),
             Err(())
         );
     }
 
     #[test]
     fn test_key_value() {
+        use std::num::NonZeroU32;
+
         assert_eq!(
-            key_value("key", stdp::U32).parse(r#""key":32,"#.into()),
-            Ok(("".into(), 32))
+            key_value("key", stdp::U32).parse("\"key\":32,"),
+            Ok(("", NonZeroU32::new(32).unwrap()))
         );
+        assert_eq!(key_value("key", stdp::U32).parse("key:32,"), Err(()));
+        assert_eq!(key_value("key", stdp::U32).parse("\"key\":32"), Err(()));
         assert_eq!(
-            key_value("key", stdp::U32).parse(r#"key:32,"#.into()),
-            Err(())
-        );
-        assert_eq!(
-            key_value("key", stdp::U32).parse(r#""key":32"#.into()),
-            Err(())
-        );
-        assert_eq!(
-            key_value("key", stdp::U32).parse(r#" "key" : 32 , nice"#.into()),
-            Ok(("nice".into(), 32))
+            key_value("key", stdp::U32).parse(" \"key\" : 32 , nice"),
+            Ok(("nice", NonZeroU32::new(32).unwrap()))
         );
     }
 
     #[test]
     fn test_list() {
+        use std::num::NonZeroU32;
+
         assert_eq!(
-            list(stdp::U32).parse("[1,2,3,4,]".into()),
-            Ok(("".into(), vec![1, 2, 3, 4,]))
+            list(stdp::U32).parse("[1,2,3,4,]"),
+            Ok((
+                "",
+                vec![
+                    NonZeroU32::new(1).unwrap(),
+                    NonZeroU32::new(2).unwrap(),
+                    NonZeroU32::new(3).unwrap(),
+                    NonZeroU32::new(4).unwrap(),
+                ]
+            ))
         );
         assert_eq!(
-            list(stdp::U32).parse(" [ 1 , 2 , 3 , 4 , ] nice".into()),
-            Ok(("nice".into(), vec![1, 2, 3, 4,]))
+            list(stdp::U32).parse(" [ 1 , 2 , 3 , 4 , ] nice"),
+            Ok((
+                "nice",
+                vec![
+                    NonZeroU32::new(1).unwrap(),
+                    NonZeroU32::new(2).unwrap(),
+                    NonZeroU32::new(3).unwrap(),
+                    NonZeroU32::new(4).unwrap(),
+                ]
+            ))
         );
-        assert_eq!(list(stdp::U32).parse("1,2,3,4,".into()), Err(()));
-        assert_eq!(list(stdp::U32).parse("[]".into()), Ok(("".into(), vec![])));
+        assert_eq!(list(stdp::U32).parse("1,2,3,4,"), Err(()));
+        assert_eq!(list(stdp::U32).parse("[]"), Ok(("", vec![])));
     }
 
     #[test]
@@ -1663,23 +1703,25 @@ mod test {
 
     #[test]
     fn test_backet() {
+        use std::num::NonZeroU32;
+
         assert_eq!(
-            Backet::parser().parse(r#"Backet{"asset_id":"usd","count":42,}"#.into()),
+            Backet::parser().parse(r#"Backet{"asset_id":"usd","count":42,}"#),
             Ok((
-                "".into(),
+                "",
                 Backet {
                     asset_id: "usd".into(),
-                    count: 42
+                    count: NonZeroU32::new(42).unwrap()
                 }
             ))
         );
         assert_eq!(
-            Backet::parser().parse(r#"Backet{"count":42,"asset_id":"usd",}"#.into()),
+            Backet::parser().parse(r#"Backet{"count":42,"asset_id":"usd",}"#),
             Ok((
-                "".into(),
+                "",
                 Backet {
                     asset_id: "usd".into(),
-                    count: 42
+                    count: NonZeroU32::new(42).unwrap()
                 }
             ))
         );
@@ -1687,26 +1729,33 @@ mod test {
 
     #[test]
     fn test_log_kind() {
+        use std::num::NonZeroU32;
+
+        // Вспомогательная функция для удобства
+        fn nz(value: u32) -> NonZeroU32 {
+            NonZeroU32::new(value).unwrap()
+        }
+
         assert_eq!(
             preceded(
                 strip_whitespace(tag("NetworkError")),
                 strip_whitespace(unquote())
             )
-            .parse(r#"NetworkError "url unknown""#.into()),
-            Ok(("".into(), "url unknown".into()))
+            .parse(r#"NetworkError "url unknown""#),
+            Ok(("", "url unknown".into()))
         );
 
         assert_eq!(
-            LogKind::parser().parse(r#"System::Error NetworkError "url unknown""#.into()),
+            LogKind::parser().parse(r#"System::Error NetworkError "url unknown""#),
             Ok((
-                "".into(),
+                "",
                 LogKind::System(SystemLogKind::Error(SystemLogErrorKind::NetworkError(
                     "url unknown".into()
                 )))
             ))
         );
 
-        // Исправленный тест для Connect с Box::new()
+        // Тест для Connect с AuthData
         let auth_data = AuthData(Box::new([
             0x30, 0xc3, 0x05, 0x82, 0x5b, 0x90, 0x00, 0x77, 0xae, 0x7f, 0x82, 0x59, 0xc1, 0xc3,
             0x28, 0xaa, 0x3e, 0x12, 0x4a, 0x07, 0xf3, 0xbf, 0xbb, 0xf2, 0x16, 0xdf, 0xc6, 0xe3,
@@ -1786,40 +1835,55 @@ mod test {
 
         assert_eq!(
         LogKind::parser().parse(
-            r#"App::Trace Connect 30c305825b900077ae7f8259c1c328aa3e124a07f3bfbbf216dfc6e308beea6e474b9a7ea6c24d003a6ae4fcf04a9e6ef7c7f17cdaa0296f66a88036badcf01f053da806fad356546349deceff24621b895440d05a715b221af8e9e068073d6dec04f148175717d3c2d1b6af84e2375718ab4a1eba7e037c1c1d43b4cf422d6f2aa9194266f0a7544eaeff8167f0e993d0ea6a8ddb98bfeb8805635d5ea9f6592fd5297e6f83b6834190f99449722cd0de87a4c122f08bbe836fd3092e5f0d37a3057e90f3dd41048da66cad3e8fd3ef72a9d86ecd9009c2db996af29dc62af5ef5eb04d0e16ce8fcecba92a4a9888f52d5d575e7dbc302ed97dbf69df15bb4f5c5601d38fbe3bd89d88768a6aed11ce2f95a6ad30bb72e787bfb734701cea1f38168be44ea19d3e98dd3c953fdb9951ac9c6e221bb0f980d8f0952ac8127da5bda7077dd25ffc8e1515c529f29516dacec6be9c084e6c91698267b2aed9038eca5ebafad479c5fb17652e25bb5b85586fae645bd7c3253d9916c0af65a20253412d5484ac15d288c6ca8823469090ded5ce0975dada63653797129f0e926af6247b457b067db683e37d848e0acf30e5602b78f1848e8da4b640ed08b75f3519a40ec96b2be964234beab37759504376c6e5ebfacdc57e4c7a22cf1e879d7bde29a2dca5fe20420215b59d102fd016606c533e8e36f7da114910664bade9b295d9043a01bc0dc4d8abbc16b1cec7789d89e699ad99dae597c7f10d6f047efc011d67444695cb8e6e8b3dba17ccc693729d01312d0f12a3fc76e12c2e4984af5cb3049b9d8a13124a1f770e96bae1fb153ba4c91bea4fae6f03010275d5a9b14012bdd678e037934dc6762005de54b32a7684e03060d5cc80378e9bef05b8f0692202944401bd06e4553e4490a0e57c5a72fc8abb1f714e22ea950fb2f1de284d6ff3da435954de355c677f60db4252a510919cbe7dadfed0441cf125fd8894753af8114f2ddacb75c3daa460920fc47d285e59fe9110e4151fcef03fa246cd2dd9a4d573e1dbbda1c6968cf4f546289b95ce1bf0a55eea6531382826d4002bc46bf441ce16056d42b5a2079e299e3191c23a7604cde03de6081e06f93cfe632c9a6088cd328662d47a4954934832df5b5f3765dbe136114c73c55cb7ce639e5d40d1d1d8f540d3c8e1bc7423f032c0da5264353468f009c973eec0448e41f9289e8d9dadc68da77d3c3ab3a6477d44024f21fba0bd4477d81c6027657527aa0413b45f417cb7b3beea835a1d5d795414d38156324cb5c1303e9924dbe40cd497c4c23c221cb912058c939bea8b79b3fea360fecaa83375a9a84e338d9e863e8021ad2df4430b8dea0c1714e1bdc478f559705549ad738453ab65c0ffcc8cf0e3bafaf4afad75ecc4dfad0de0cfe27d50d656456ea6c361b76508357714079424"#.into()
+            r#"App::Trace Connect 30c305825b900077ae7f8259c1c328aa3e124a07f3bfbbf216dfc6e308beea6e474b9a7ea6c24d003a6ae4fcf04a9e6ef7c7f17cdaa0296f66a88036badcf01f053da806fad356546349deceff24621b895440d05a715b221af8e9e068073d6dec04f148175717d3c2d1b6af84e2375718ab4a1eba7e037c1c1d43b4cf422d6f2aa9194266f0a7544eaeff8167f0e993d0ea6a8ddb98bfeb8805635d5ea9f6592fd5297e6f83b6834190f99449722cd0de87a4c122f08bbe836fd3092e5f0d37a3057e90f3dd41048da66cad3e8fd3ef72a9d86ecd9009c2db996af29dc62af5ef5eb04d0e16ce8fcecba92a4a9888f52d5d575e7dbc302ed97dbf69df15bb4f5c5601d38fbe3bd89d88768a6aed11ce2f95a6ad30bb72e787bfb734701cea1f38168be44ea19d3e98dd3c953fdb9951ac9c6e221bb0f980d8f0952ac8127da5bda7077dd25ffc8e1515c529f29516dacec6be9c084e6c91698267b2aed9038eca5ebafad479c5fb17652e25bb5b85586fae645bd7c3253d9916c0af65a20253412d5484ac15d288c6ca8823469090ded5ce0975dada63653797129f0e926af6247b457b067db683e37d848e0acf30e5602b78f1848e8da4b640ed08b75f3519a40ec96b2be964234beab37759504376c6e5ebfacdc57e4c7a22cf1e879d7bde29a2dca5fe20420215b59d102fd016606c533e8e36f7da114910664bade9b295d9043a01bc0dc4d8abbc16b1cec7789d89e699ad99dae597c7f10d6f047efc011d67444695cb8e6e8b3dba17ccc693729d01312d0f12a3fc76e12c2e4984af5cb3049b9d8a13124a1f770e96bae1fb153ba4c91bea4fae6f03010275d5a9b14012bdd678e037934dc6762005de54b32a7684e03060d5cc80378e9bef05b8f0692202944401bd06e4553e4490a0e57c5a72fc8abb1f714e22ea950fb2f1de284d6ff3da435954de355c677f60db4252a510919cbe7dadfed0441cf125fd8894753af8114f2ddacb75c3daa460920fc47d285e59fe9110e4151fcef03fa246cd2dd9a4d573e1dbbda1c6968cf4f546289b95ce1bf0a55eea6531382826d4002bc46bf441ce16056d42b5a2079e299e3191c23a7604cde03de6081e06f93cfe632c9a6088cd328662d47a4954934832df5b5f3765dbe136114c73c55cb7ce639e5d40d1d1d8f540d3c8e1bc7423f032c0da5264353468f009c973eec0448e41f9289e8d9dadc68da77d3c3ab3a6477d44024f21fba0bd4477d81c6027657527aa0413b45f417cb7b3beea835a1d5d795414d38156324cb5c1303e9924dbe40cd497c4c23c221cb912058c939bea8b79b3fea360fecaa83375a9a84e338d9e863e8021ad2df4430b8dea0c1714e1bdc478f559705549ad738453ab65c0ffcc8cf0e3bafaf4afad75ecc4dfad0de0cfe27d50d656456ea6c361b76508357714079424"#
         ),
-        Ok(("".into(), LogKind::App(AppLogKind::Trace(AppLogTraceKind::Connect(auth_data)))))
+        Ok((
+            "",
+            LogKind::App(AppLogKind::Trace(AppLogTraceKind::Connect(auth_data)))
+        ))
     );
 
         assert_eq!(
             LogKind::parser().parse(
                 r#"App::Journal CreateUser {"user_id": "Steeve", "authorized_capital": 10000,}"#
-                    .into()
             ),
             Ok((
-                "".into(),
+                "",
                 LogKind::App(AppLogKind::Journal(AppLogJournalKind::CreateUser {
                     user_id: "Steeve".into(),
-                    authorized_capital: 10_000
+                    authorized_capital: nz(10000)
                 }))
             ))
         );
+
         assert_eq!(
-            LogKind::parser().parse(r#"App::Journal DeleteUser {"user_id": "Steeve",}"#.into()),
+            LogKind::parser().parse(r#"App::Journal DeleteUser {"user_id": "Steeve",}"#),
             Ok((
-                "".into(),
+                "",
                 LogKind::App(AppLogKind::Journal(AppLogJournalKind::DeleteUser {
                     user_id: "Steeve".into()
                 }))
             ))
         );
-        assert_eq!(LogKind::parser().parse(r#"App::Journal RegisterAsset {"asset_id": "bayc", "liquidity": 100000000, "user_id": "Steeve",}"#.into()), Ok(("".into(), LogKind::App(AppLogKind::Journal(AppLogJournalKind::RegisterAsset{asset_id: "bayc".into(), user_id: "Steeve".into(), liquidity: 100_000_000})))));
+
+        assert_eq!(
+        LogKind::parser().parse(r#"App::Journal RegisterAsset {"asset_id": "bayc", "liquidity": 100000000, "user_id": "Steeve",}"#),
+        Ok((
+            "",
+            LogKind::App(AppLogKind::Journal(AppLogJournalKind::RegisterAsset {
+                asset_id: "bayc".into(),
+                user_id: "Steeve".into(),
+                liquidity: nz(100_000_000)
+            }))
+        ))
+    );
+
         assert_eq!(
             LogKind::parser().parse(
-                r#"App::Journal UnregisterAsset {"asset_id": "bayc", "user_id": "Steeve",}"#.into()
+                r#"App::Journal UnregisterAsset {"asset_id": "bayc", "user_id": "Steeve",}"#
             ),
             Ok((
-                "".into(),
+                "",
                 LogKind::App(AppLogKind::Journal(AppLogJournalKind::UnregisterAsset {
                     asset_id: "bayc".into(),
                     user_id: "Steeve".into()
@@ -1828,34 +1892,59 @@ mod test {
         );
 
         assert_eq!(
-            LogKind::parser().parse(
-                r#"App::Journal DepositCash UserCash{"user_id": "Steeve", "count": 10,}"#.into()
-            ),
+            LogKind::parser()
+                .parse(r#"App::Journal DepositCash UserCash{"user_id": "Steeve", "count": 10,}"#),
             Ok((
-                "".into(),
+                "",
                 LogKind::App(AppLogKind::Journal(AppLogJournalKind::DepositCash(
                     UserCash {
                         user_id: "Steeve".into(),
-                        count: 10
+                        count: nz(10)
                     }
                 )))
             ))
         );
+
         assert_eq!(
-            LogKind::parser().parse(
-                r#"App::Journal WithdrawCash UserCash{"user_id": "Steeve", "count": 10,}"#.into()
-            ),
+            LogKind::parser()
+                .parse(r#"App::Journal WithdrawCash UserCash{"user_id": "Steeve", "count": 10,}"#),
             Ok((
-                "".into(),
+                "",
                 LogKind::App(AppLogKind::Journal(AppLogJournalKind::WithdrawCash(
                     UserCash {
                         user_id: "Steeve".into(),
-                        count: 10
+                        count: nz(10)
                     }
                 )))
             ))
         );
-        assert_eq!(LogKind::parser().parse(r#"App::Journal BuyAsset UserBacket{"user_id": "Steeve", "backet": Backet{"asset_id":"bayc","count":1,},}"#.into()), Ok(("".into(), LogKind::App(AppLogKind::Journal(AppLogJournalKind::BuyAsset(UserBacket{user_id: "Steeve".into(), backet: Backet{asset_id: "bayc".into(),count:1}}))))));
-        assert_eq!(LogKind::parser().parse(r#"App::Journal SellAsset UserBacket{"user_id": "Steeve", "backet": Backet{"asset_id":"bayc","count":1,},}"#.into()), Ok(("".into(), LogKind::App(AppLogKind::Journal(AppLogJournalKind::SellAsset(UserBacket{user_id: "Steeve".into(), backet: Backet{asset_id: "bayc".into(),count:1}}))))));
+
+        assert_eq!(
+        LogKind::parser().parse(r#"App::Journal BuyAsset UserBacket{"user_id": "Steeve", "backet": Backet{"asset_id":"bayc","count":1,},}"#),
+        Ok((
+            "",
+            LogKind::App(AppLogKind::Journal(AppLogJournalKind::BuyAsset(UserBacket {
+                user_id: "Steeve".into(),
+                backet: Backet {
+                    asset_id: "bayc".into(),
+                    count: nz(1)
+                }
+            })))
+        ))
+    );
+
+        assert_eq!(
+        LogKind::parser().parse(r#"App::Journal SellAsset UserBacket{"user_id": "Steeve", "backet": Backet{"asset_id":"bayc","count":1,},}"#),
+        Ok((
+            "",
+            LogKind::App(AppLogKind::Journal(AppLogJournalKind::SellAsset(UserBacket {
+                user_id: "Steeve".into(),
+                backet: Backet {
+                    asset_id: "bayc".into(),
+                    count: nz(1)
+                }
+            })))
+        ))
+    );
     }
 }

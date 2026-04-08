@@ -68,7 +68,7 @@ impl<R: std::io::Read + std::fmt::Debug> Iterator for LogIterator<R> {
 pub fn read_log<R: std::io::Read + std::fmt::Debug + 'static>(
     input: R,
     mode: u8,
-    request_ids: Vec<u32>,
+    request_ids: Vec<std::num::NonZeroU32>,
 ) -> Vec<LogLine> {
     let logs = LogIterator::new(input);
     let mut collected = Vec::new();
