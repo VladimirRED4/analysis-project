@@ -5,6 +5,7 @@ pub const READ_MODE_ALL: u8 = 0;
 pub const READ_MODE_ERRORS: u8 = 1;
 pub const READ_MODE_EXCHANGES: u8 = 2;
 
+#[allow(clippy::type_complexity)]
 #[derive(Debug)]
 struct LogIterator<R: std::io::Read + std::fmt::Debug> {
     lines: std::iter::Filter<
@@ -67,7 +68,7 @@ pub fn read_log<R: std::io::Read + std::fmt::Debug + 'static>(
                         | AppLogJournalKind::WithdrawCash(_)
                 ))
             ),
-            _ => return collected, // вместо паники возвращаем пустой результат
+            _ => return collected,
         };
 
         if request_id_matches && mode_matches {

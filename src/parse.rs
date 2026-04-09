@@ -1,10 +1,5 @@
 use std::num::NonZeroU32;
 
-// pub trait Parser {
-//     type Dest;
-//     fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()>;
-// }
-
 pub trait Parser {
     type Dest;
     fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ParseError>;
@@ -153,12 +148,10 @@ struct AsIs;
 impl Parser for AsIs {
     type Dest = String;
     fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ParseError> {
-        // Возвращаем всю строку как результат, а остаток - пустую строку
         Ok(("", input.to_string()))
     }
 }
 
-/// Парсер константных строк
 #[derive(Debug, Clone)]
 pub struct Tag {
     pub tag: &'static str,
@@ -184,7 +177,7 @@ impl Parser for QuotedTag {
     type Dest = ();
     fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ParseError> {
         let (remaining, candidate) = do_unquote_non_escaped(input)?;
-        let (tag_remaining, _) = self.0.parse(candidate)?; // Теперь ? работает
+        let (tag_remaining, _) = self.0.parse(candidate)?;
         if !tag_remaining.is_empty() {
             return Err(ParseError::InvalidFormat);
         }
@@ -205,7 +198,7 @@ impl<T: Parser> Parser for StripWhitespace<T> {
     fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ParseError> {
         let input = input.trim_start();
         let (remaining, result) = self.parser.parse(input)?;
-        Ok((remaining.trim_start(), result)) // Добавлен trim_start() для остатка
+        Ok((remaining.trim_start(), result))
     }
 }
 
@@ -389,7 +382,6 @@ where
     }
 }
 
-/// Конструктор [KeyValue]
 pub fn key_value<T: Parser>(key: &'static str, value_parser: T) -> KeyValue<T> {
     KeyValue {
         parser: delimited(
@@ -508,7 +500,6 @@ fn permutation3<A0: Parser, A1: Parser, A2: Parser>(
         parsers: (a0, a1, a2),
     }
 }
-/// Комбинатор списка
 #[derive(Debug, Clone)]
 pub struct List<T> {
     pub parser: T,
@@ -549,7 +540,6 @@ fn list<T: Parser>(parser: T) -> List<T> {
 pub struct Alt<T> {
     pub parser: T,
 }
-
 
 // Псевдонимы для кортежей парсеров, используемых в Alt
 pub type Alt2<A0, A1> = (A0, A1);
@@ -639,7 +629,7 @@ fn alt4<
         parser: (a0, a1, a2, a3),
     }
 }
-impl<A0, A1, A2, A3, A4, A5, A6, A7, Dest> Parser for Alt<(A0, A1, A2, A3, A4, A5, A6, A7)>
+impl<A0, A1, A2, A3, A4, A5, A6, A7, Dest> Parser for Alt<Alt8<A0, A1, A2, A3, A4, A5, A6, A7>>
 where
     A0: Parser<Dest = Dest>,
     A1: Parser<Dest = Dest>,
@@ -652,31 +642,32 @@ where
 {
     type Dest = Dest;
     fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ParseError> {
-        if let Ok(ok) = self.parser.0.parse(input) {
-            return Ok(ok);
+        if let Ok(result) = self.parser.0.parse(input) {
+            return Ok(result);
         }
-        if let Ok(ok) = self.parser.1.parse(input) {
-            return Ok(ok);
+        if let Ok(result) = self.parser.1.parse(input) {
+            return Ok(result);
         }
-        if let Ok(ok) = self.parser.2.parse(input) {
-            return Ok(ok);
+        if let Ok(result) = self.parser.2.parse(input) {
+            return Ok(result);
         }
-        if let Ok(ok) = self.parser.3.parse(input) {
-            return Ok(ok);
+        if let Ok(result) = self.parser.3.parse(input) {
+            return Ok(result);
         }
-        if let Ok(ok) = self.parser.4.parse(input) {
-            return Ok(ok);
+        if let Ok(result) = self.parser.4.parse(input) {
+            return Ok(result);
         }
-        if let Ok(ok) = self.parser.5.parse(input) {
-            return Ok(ok);
+        if let Ok(result) = self.parser.5.parse(input) {
+            return Ok(result);
         }
-        if let Ok(ok) = self.parser.6.parse(input) {
-            return Ok(ok);
+        if let Ok(result) = self.parser.6.parse(input) {
+            return Ok(result);
         }
         self.parser.7.parse(input)
     }
 }
 
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn alt8<
     Dest,
     A0: Parser<Dest = Dest>,
@@ -770,7 +761,6 @@ impl Parsable for Status {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AssetDsc {
-    // `dsc` aka `description`
     pub id: String,
     pub dsc: String,
 }
@@ -1255,7 +1245,6 @@ impl Parsable for AppLogJournalKind {
         preceded(
             tag("Journal"),
             alt8(
-                // CreateUser
                 map(
                     preceded(
                         strip_whitespace(tag("CreateUser")),
@@ -1270,10 +1259,9 @@ impl Parsable for AppLogJournalKind {
                     ),
                     |(user_id, authorized_capital)| AppLogJournalKind::CreateUser {
                         user_id,
-                        authorized_capital, // теперь это NonZeroU32
+                        authorized_capital,
                     },
                 ),
-                // DeleteUser
                 map(
                     preceded(
                         strip_whitespace(tag("DeleteUser")),
@@ -1281,7 +1269,6 @@ impl Parsable for AppLogJournalKind {
                     ),
                     |user_id| AppLogJournalKind::DeleteUser { user_id },
                 ),
-                // RegisterAsset
                 map(
                     preceded(
                         strip_whitespace(tag("RegisterAsset")),
@@ -1298,10 +1285,9 @@ impl Parsable for AppLogJournalKind {
                     |(asset_id, user_id, liquidity)| AppLogJournalKind::RegisterAsset {
                         asset_id,
                         user_id,
-                        liquidity, // теперь это NonZeroU32
+                        liquidity,
                     },
                 ),
-                // UnregisterAsset
                 map(
                     preceded(
                         strip_whitespace(tag("UnregisterAsset")),
@@ -1316,22 +1302,18 @@ impl Parsable for AppLogJournalKind {
                     ),
                     |(asset_id, user_id)| AppLogJournalKind::UnregisterAsset { asset_id, user_id },
                 ),
-                // DepositCash
                 map(
                     preceded(strip_whitespace(tag("DepositCash")), UserCash::parser()),
                     AppLogJournalKind::DepositCash,
                 ),
-                // WithdrawCash
                 map(
                     preceded(strip_whitespace(tag("WithdrawCash")), UserCash::parser()),
                     AppLogJournalKind::WithdrawCash,
                 ),
-                // BuyAsset
                 map(
                     preceded(strip_whitespace(tag("BuyAsset")), UserBacket::parser()),
                     AppLogJournalKind::BuyAsset,
                 ),
-                // SellAsset
                 map(
                     preceded(strip_whitespace(tag("SellAsset")), UserBacket::parser()),
                     AppLogJournalKind::SellAsset,
@@ -1407,7 +1389,6 @@ pub fn parse_log_line(input: &str) -> Result<(&str, LogLine), ParseError> {
     <LogLine as Parsable>::parser().parse(input)
 }
 
-/// Тип ошибки, возвращаемый парсерами.
 #[derive(Debug, PartialEq)]
 pub enum ParseError {
     /// Не удалось распарсить входные данные.
@@ -1629,13 +1610,10 @@ mod test {
     fn test_authdata() {
         let s = "30c305825b900077ae7f8259c1c328aa3e124a07f3bfbbf216dfc6e308beea6e474b9a7ea6c24d003a6ae4fcf04a9e6ef7c7f17cdaa0296f66a88036badcf01f053da806fad356546349deceff24621b895440d05a715b221af8e9e068073d6dec04f148175717d3c2d1b6af84e2375718ab4a1eba7e037c1c1d43b4cf422d6f2aa9194266f0a7544eaeff8167f0e993d0ea6a8ddb98bfeb8805635d5ea9f6592fd5297e6f83b6834190f99449722cd0de87a4c122f08bbe836fd3092e5f0d37a3057e90f3dd41048da66cad3e8fd3ef72a9d86ecd9009c2db996af29dc62af5ef5eb04d0e16ce8fcecba92a4a9888f52d5d575e7dbc302ed97dbf69df15bb4f5c5601d38fbe3bd89d88768a6aed11ce2f95a6ad30bb72e787bfb734701cea1f38168be44ea19d3e98dd3c953fdb9951ac9c6e221bb0f980d8f0952ac8127da5bda7077dd25ffc8e1515c529f29516dacec6be9c084e6c91698267b2aed9038eca5ebafad479c5fb17652e25bb5b85586fae645bd7c3253d9916c0af65a20253412d5484ac15d288c6ca8823469090ded5ce0975dada63653797129f0e926af6247b457b067db683e37d848e0acf30e5602b78f1848e8da4b640ed08b75f3519a40ec96b2be964234beab37759504376c6e5ebfacdc57e4c7a22cf1e879d7bde29a2dca5fe20420215b59d102fd016606c533e8e36f7da114910664bade9b295d9043a01bc0dc4d8abbc16b1cec7789d89e699ad99dae597c7f10d6f047efc011d67444695cb8e6e8b3dba17ccc693729d01312d0f12a3fc76e12c2e4984af5cb3049b9d8a13124a1f770e96bae1fb153ba4c91bea4fae6f03010275d5a9b14012bdd678e037934dc6762005de54b32a7684e03060d5cc80378e9bef05b8f0692202944401bd06e4553e4490a0e57c5a72fc8abb1f714e22ea950fb2f1de284d6ff3da435954de355c677f60db4252a510919cbe7dadfed0441cf125fd8894753af8114f2ddacb75c3daa460920fc47d285e59fe9110e4151fcef03fa246cd2dd9a4d573e1dbbda1c6968cf4f546289b95ce1bf0a55eea6531382826d4002bc46bf441ce16056d42b5a2079e299e3191c23a7604cde03de6081e06f93cfe632c9a6088cd328662d47a4954934832df5b5f3765dbe136114c73c55cb7ce639e5d40d1d1d8f540d3c8e1bc7423f032c0da5264353468f009c973eec0448e41f9289e8d9dadc68da77d3c3ab3a6477d44024f21fba0bd4477d81c6027657527aa0413b45f417cb7b3beea835a1d5d795414d38156324cb5c1303e9924dbe40cd497c4c23c221cb912058c939bea8b79b3fea360fecaa83375a9a84e338d9e863e8021ad2df4430b8dea0c1714e1bdc478f559705549ad738453ab65c0ffcc8cf0e3bafaf4afad75ecc4dfad0de0cfe27d50d656456ea6c361b76508357714079424";
 
-        // Парсим строку (теперь передаём &str, не to_string())
         let res = AuthData::parser().parse(s);
         assert!(res.is_ok());
 
         let (remaining, auth_data) = res.unwrap();
-        // Должно остаться пустая строка, если вся строка была распарсена
-        // (1024 байта = 2048 hex символов)
         assert_eq!(remaining, "");
         assert_eq!(auth_data.0.len(), 1024);
     }
@@ -1750,7 +1728,6 @@ mod test {
             ))
         );
 
-        // Тест для Connect с AuthData
         let auth_data = AuthData(Box::new([
             0x30, 0xc3, 0x05, 0x82, 0x5b, 0x90, 0x00, 0x77, 0xae, 0x7f, 0x82, 0x59, 0xc1, 0xc3,
             0x28, 0xaa, 0x3e, 0x12, 0x4a, 0x07, 0xf3, 0xbf, 0xbb, 0xf2, 0x16, 0xdf, 0xc6, 0xe3,
