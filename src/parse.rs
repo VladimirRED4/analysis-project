@@ -1436,15 +1436,12 @@ mod test {
 
     #[test]
     fn test_i32() {
-        assert_eq!(stdp::I32.parse("411".into()), Ok(("".into(), 411)));
-        assert_eq!(stdp::I32.parse("411ab".into()), Ok(("ab".into(), 411)));
-        assert_eq!(stdp::I32.parse("".into()), Err(ParseError::InvalidFormat));
-        assert_eq!(stdp::I32.parse("-3".into()), Ok(("".into(), -3)));
-        assert_eq!(
-            stdp::I32.parse("0x03".into()),
-            Err(ParseError::InvalidFormat)
-        );
-        assert_eq!(stdp::I32.parse("-".into()), Err(ParseError::InvalidFormat));
+        assert_eq!(stdp::I32.parse("411"), Ok(("", 411)));
+        assert_eq!(stdp::I32.parse("411ab"), Ok(("ab", 411)));
+        assert_eq!(stdp::I32.parse(""), Err(ParseError::InvalidFormat));
+        assert_eq!(stdp::I32.parse("-3"), Ok(("", -3)));
+        assert_eq!(stdp::I32.parse("0x03"), Err(ParseError::InvalidFormat));
+        assert_eq!(stdp::I32.parse("-"), Err(ParseError::InvalidFormat));
     }
 
     #[test]
@@ -1455,16 +1452,13 @@ mod test {
 
     #[test]
     fn test_do_unquote_non_escaped() {
+        assert_eq!(do_unquote_non_escaped(r#""411""#), Ok(("", "411")));
         assert_eq!(
-            do_unquote_non_escaped(r#""411""#.into()),
-            Ok(("".into(), "411".into()))
-        );
-        assert_eq!(
-            do_unquote_non_escaped(r#" "411""#.into()),
+            do_unquote_non_escaped(r#" "411""#),
             Err(ParseError::InvalidFormat)
         );
         assert_eq!(
-            do_unquote_non_escaped(r#"411"#.into()),
+            do_unquote_non_escaped(r#"411"#),
             Err(ParseError::InvalidFormat)
         );
     }
@@ -1482,12 +1476,9 @@ mod test {
 
     #[test]
     fn test_tag() {
+        assert_eq!(tag("key=").parse("key=value"), Ok(("value".into(), ())));
         assert_eq!(
-            tag("key=").parse("key=value".into()),
-            Ok(("value".into(), ()))
-        );
-        assert_eq!(
-            tag("key=").parse("key:value".into()),
+            tag("key=").parse("key:value"),
             Err(ParseError::InvalidFormat)
         );
     }
@@ -1495,15 +1486,15 @@ mod test {
     #[test]
     fn test_quoted_tag() {
         assert_eq!(
-            quoted_tag("key").parse(r#""key"=value"#.into()),
-            Ok(("=value".into(), ()))
+            quoted_tag("key").parse(r#""key"=value"#),
+            Ok(("=value", ()))
         );
         assert_eq!(
-            quoted_tag("key").parse(r#""key:"value"#.into()),
+            quoted_tag("key").parse(r#""key:"value"#),
             Err(ParseError::InvalidFormat)
         );
         assert_eq!(
-            quoted_tag("key").parse(r#"key=value"#.into()),
+            quoted_tag("key").parse(r#"key=value"#),
             Err(ParseError::InvalidFormat)
         );
     }
@@ -1613,14 +1604,24 @@ mod test {
                 strip_whitespace(tag("AssetDsc")),
                 strip_whitespace(tag("{"))
             )
-            .parse(" AssetDsc { ".into()),
-            Ok(("".into(), ((), ())))
+            .parse(" AssetDsc { "),
+            Ok(("", ((), ())))
         );
 
         assert_eq!(
-            AssetDsc::parser().parse(r#"AssetDsc{"id":"usd","dsc":"USA dollar",}"#.into()),
+            AssetDsc::parser().parse(r#"AssetDsc{"id":"usd","dsc":"USA dollar",}"#),
             Ok((
-                "".into(),
+                "",
+                AssetDsc {
+                    id: "usd".into(),
+                    dsc: "USA dollar".into()
+                }
+            ))
+        );
+        assert_eq!(
+            AssetDsc::parser().parse(r#" AssetDsc { "id" : "usd" , "dsc" : "USA dollar" , } "#),
+            Ok((
+                "",
                 AssetDsc {
                     id: "usd".into(),
                     dsc: "USA dollar".into()
@@ -1629,20 +1630,9 @@ mod test {
         );
         assert_eq!(
             AssetDsc::parser()
-                .parse(r#" AssetDsc { "id" : "usd" , "dsc" : "USA dollar" , } "#.into()),
+                .parse(r#" AssetDsc { "id" : "usd" , "dsc" : "USA dollar" , } nice "#),
             Ok((
-                "".into(),
-                AssetDsc {
-                    id: "usd".into(),
-                    dsc: "USA dollar".into()
-                }
-            ))
-        );
-        assert_eq!(
-            AssetDsc::parser()
-                .parse(r#" AssetDsc { "id" : "usd" , "dsc" : "USA dollar" , } nice "#.into()),
-            Ok((
-                "nice ".into(),
+                "nice ",
                 AssetDsc {
                     id: "usd".into(),
                     dsc: "USA dollar".into()
@@ -1651,9 +1641,9 @@ mod test {
         );
 
         assert_eq!(
-            AssetDsc::parser().parse(r#"AssetDsc{"dsc":"USA dollar","id":"usd",}"#.into()),
+            AssetDsc::parser().parse(r#"AssetDsc{"dsc":"USA dollar","id":"usd",}"#),
             Ok((
-                "".into(),
+                "",
                 AssetDsc {
                     id: "usd".into(),
                     dsc: "USA dollar".into()
