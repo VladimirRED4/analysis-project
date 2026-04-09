@@ -1,5 +1,10 @@
 # Рефакторинг проекта анализа логов
 
+![Tests](https://github.com/VladimirRED4/analysis-project/actions/workflows/rust.yml/badge.svg)
+![Security Audit](https://github.com/VladimirRED4/analysis-project/actions/workflows/audit.yml/badge.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)
+
 ## Основные изменения
 
 ### 1. Убраны `Rc<RefCell<T>>` и `unsafe`
