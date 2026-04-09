@@ -1,34 +1,10 @@
 pub mod parse;
 use parse::*;
 
-// подсказка: лучше использовать enum и match
-/// Режим чтения из логов всего подряд
 pub const READ_MODE_ALL: u8 = 0;
-/// Режим чтения из логов только ошибок
 pub const READ_MODE_ERRORS: u8 = 1;
-/// Режим чтения из логов только операций, касающихся деген
 pub const READ_MODE_EXCHANGES: u8 = 2;
 
-/// Обёртка, без которой не выполнено требование `std::io::BufReader<T: std::io::Read>`
-// #[derive(Debug)]
-// struct RefMutWrapper<'a, T>(std::cell::RefMut<'a, T>);
-// impl<'a, T> std::io::Read for RefMutWrapper<'a, T>
-// where T: std::io::Read
-// {
-// fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-// self.0.read(buf)
-// }
-// }
-
-/// Для `Box<dyn много трейтов, помимо auto-трейтов>`, (`rustc E0225`)
-/// `only auto traits can be used as additional traits in a trait object`
-/// `consider creating a new trait with all of these as supertraits and using that trait here instead`
-// pub trait MyReader: std::io::Read + std::fmt::Debug + 'static
-// {}
-// impl<T: std::io::Read + std::fmt::Debug + 'static> MyReader for T
-// {}
-// подсказка: вместо trait-объекта можно дженерик
-/// Итератор, на выходе которого - строки распарсенной структуры данных
 #[derive(Debug)]
 struct LogIterator<R: std::io::Read + std::fmt::Debug> {
     lines: std::iter::Filter<
@@ -64,7 +40,6 @@ impl<R: std::io::Read + std::fmt::Debug> Iterator for LogIterator<R> {
     }
 }
 
-/// Принимает поток байт, отдаёт отфильтрованные и распарсенные логи
 pub fn read_log<R: std::io::Read + std::fmt::Debug + 'static>(
     input: R,
     mode: u8,
@@ -102,13 +77,10 @@ pub fn read_log<R: std::io::Read + std::fmt::Debug + 'static>(
     collected
 }
 
-// lib.rs - тесты
 #[cfg(test)]
 mod test {
     use super::*;
-
     const SOURCE1: &'static str = r#"System::Error NetworkError "url unknown" requestid=1"#;
-
     const SOURCE: &'static str = r#"
 System::Error NetworkError "network interface is down" requestid=1
 App::Error SystemError "network" requestid=1

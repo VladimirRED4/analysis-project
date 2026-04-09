@@ -1,71 +1,50 @@
-// Пусть есть логи:
-// System(requestid):
-// - trace
-// - error
-// App(requestid):
-// - trace
-// - error
-// - journal (человекочитаемая сводка)
+use analysis::parse::{Announcements, ParseError};
+use log::{error, info};
+use std::process;
 
-// Есть прототип штуки, которая умеет:
-// - парсить логи
-// - фильтровать
-//  -- по requestid
-//  -- по ошибкам
-//  -- по изменению счёта (купить/продать)
-
-// Модель данных:
-// - Пользователь (userid, имя)
-// - Вещи
-//  -- Предмет (assetid, название)
-//  -- Набор (assetid, количество)
-//      comment{-- Собственность (assetid, userid владельца, количество)}
-//  -- Таблица предложения (assetid на assetid, userid продавца)
-//  -- Таблица спроса (assetid на assetid, userid покупателя)
-// - Операция App
-//  -- Journal
-//   --- Создать пользователя userid с уставным капиталом от 10usd и выше
-//   --- Удалить пользователя
-//   --- Зарегистрировать assetid с ликвидностью от 50usd
-//   --- Удалить assetid (весь asset должен принадлежать пользователю)
-//   --- Внести usd для userid (usd (aka доллар сша) - это тип asset)
-//   --- Вывести usd для userid
-//   --- Купить asset
-//   --- Продать asset
-//  -- Trace
-//   --- Соединить с биржей
-//   --- Получить данные с биржи
-//   --- Локальная проверка корректности (упреждение ошибок в ответе)
-//   --- Отправить запрос в биржу
-//   --- Получить ответ от биржи
-//  -- Error
-//   --- нет asset
-//   --- системная ошибка
-// - Операция System
-//  -- Trace
-//   --- Отправить запрос
-//   --- Получить ответ
-//  -- Error
-//   --- нет сети
-//   --- отказано в доступе
 fn main() {
-    println!("Placeholder для экспериментов с cli");
-
+    env_logger::init();
+    info!("Placeholder для экспериментов с cli");
     let parsing_demo =
         r#"[UserBackets{"user_id":"Bob","backets":[Backet{"asset_id":"milk","count":3,},],},]"#;
-    let announcements = analysis::parse::just_parse_anouncements(parsing_demo).unwrap();
-    println!("demo-parsed: {:?}", announcements);
+    let announcements = match analysis::parse::parse::<Announcements>(parsing_demo) {
+        Ok((_, announcements)) => announcements,
+        Err(ParseError::InvalidFormat) => {
+            error!("Не удалось распарсить демо-строку");
+            process::exit(1);
+        }
+    };
+    info!("demo-parsed: {:?}", announcements);
 
     let args = std::env::args().collect::<Vec<_>>();
+    if args.len() < 2 {
+        error!("Укажите путь к файлу с логами");
+        error!("Использование: {} <log_file>", args[0]);
+        process::exit(1);
+    }
+
     let filename = &args[1];
-    println!(
+    info!(
         "Trying opening file '{}' from directory '{}'",
         filename,
-        std::env::current_dir().unwrap().to_string_lossy()
+        match std::env::current_dir() {
+            Ok(dir) => dir.to_string_lossy().to_string(),
+            Err(e) => {
+                error!("Не удалось получить текущую директорию: {}", e);
+                process::exit(1);
+            }
+        }
     );
-    let file = std::fs::File::open(filename).unwrap();
+
+    let file = match std::fs::File::open(filename) {
+        Ok(file) => file,
+        Err(e) => {
+            error!("Не удалось открыть файл '{}': {}", filename, e);
+            process::exit(1);
+        }
+    };
 
     let logs = analysis::read_log(file, analysis::READ_MODE_ALL, vec![]);
-    println!("got logs:");
-    logs.iter().for_each(|parsed| println!("  {:?}", parsed));
+    info!("got logs ({} entries):", logs.len());
+    logs.iter().for_each(|parsed| info!("{:?}", parsed));
 }

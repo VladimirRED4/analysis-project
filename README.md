@@ -56,5 +56,5 @@ cargo test -- --nocapture
 cargo test test_all -- --nocapture
 
 // Запуск примера логов
-cargo run example.log
+RUST_LOG=info cargo run example.log
 ```
