@@ -12,8 +12,6 @@ pub trait Parsable: Sized {
 mod stdp {
     use super::*;
 
-    use std::num::NonZeroU32;
-
     #[derive(Debug)]
     pub struct U32;
     impl Parser for U32 {
@@ -1414,8 +1412,6 @@ mod test {
 
     #[test]
     fn test_u32() {
-        use std::num::NonZeroU32;
-
         assert_eq!(
             stdp::U32.parse("411"),
             Ok(("", NonZeroU32::new(411).unwrap()))
@@ -1514,8 +1510,6 @@ mod test {
 
     #[test]
     fn test_strip_whitespace() {
-        use std::num::NonZeroU32;
-
         assert_eq!(
             strip_whitespace(tag("hello")).parse(" hello world"),
             Ok(("world", ()))
@@ -1529,8 +1523,6 @@ mod test {
 
     #[test]
     fn test_delimited() {
-        use std::num::NonZeroU32;
-
         assert_eq!(
             delimited(tag("["), stdp::U32, tag("]")).parse("[0x32]"),
             Ok(("", NonZeroU32::new(0x32).unwrap()))
@@ -1551,8 +1543,6 @@ mod test {
 
     #[test]
     fn test_key_value() {
-        use std::num::NonZeroU32;
-
         assert_eq!(
             key_value("key", stdp::U32).parse("\"key\":32,"),
             Ok(("", NonZeroU32::new(32).unwrap()))
@@ -1573,8 +1563,6 @@ mod test {
 
     #[test]
     fn test_list() {
-        use std::num::NonZeroU32;
-
         assert_eq!(
             list(stdp::U32).parse("[1,2,3,4,]"),
             Ok((
@@ -1676,8 +1664,6 @@ mod test {
 
     #[test]
     fn test_backet() {
-        use std::num::NonZeroU32;
-
         assert_eq!(
             Backet::parser().parse(r#"Backet{"asset_id":"usd","count":42,}"#),
             Ok((
@@ -1702,8 +1688,6 @@ mod test {
 
     #[test]
     fn test_log_kind() {
-        use std::num::NonZeroU32;
-
         // Вспомогательная функция для удобства
         fn nz(value: u32) -> NonZeroU32 {
             NonZeroU32::new(value).unwrap()
